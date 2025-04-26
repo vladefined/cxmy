@@ -31,6 +31,9 @@ class C1M2Layer(nn.Module):
         self.inputs_layer = nn.Linear(input_size, hidden_dim, bias=bias)
         self.gates_layer = nn.Linear(hidden_dim * 2, hidden_dim * 2, bias=gate_bias)
 
+        self.in_norm = nn.LayerNorm(hidden_dim)
+        self.gate_norm = nn.LayerNorm(hidden_dim * 2)
+
         self.activation_fn = activation_fn
 
     def get_gates(self, inputs: torch.Tensor, state: torch.Tensor):
@@ -49,8 +52,9 @@ class C1M2Layer(nn.Module):
         """
         batch_size, hidden_dim = state.shape
 
-        # Concatinate inputs and state together
+        # Concatinate inputs and state together and normalize
         combined = torch.cat([inputs, state], dim=-1)
+        combined = self.gate_norm(combined)
 
         # Calculate linear projection of inputs and state
         # and reshape it from [batch_size, hidden_dim * 2] to [batch_size, hidden_dim, 2]
@@ -78,8 +82,9 @@ class C1M2Layer(nn.Module):
         """
         batch_size, _ = x.shape
 
-        # Calculate inputs projection
+        # Calculate inputs projection and normalize
         in_proj = self.inputs_layer(x)
+        in_proj = self.in_norm(in_proj)
 
         # Get normalized gates for input projection and state
         in_gate, state_gate = self.get_gates(in_proj, state)
@@ -160,7 +165,7 @@ class C1M2(nn.Module):
         # Create empty tensor for outputs
         outputs = torch.empty(batch_size, seq_len, self.hidden_dim, device=x.device)
 
-        # Iterate over given sequence and pass each step through all CxMy layer (VERY SLOW!!!)
+        # Iterate over given sequence and pass each step through all CxMy layers (VERY SLOW!!!)
         for i in range(seq_len):
             outputs[:, i] = self.step(x[:, i], states)
 
